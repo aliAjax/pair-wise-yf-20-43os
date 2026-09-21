@@ -1,127 +1,180 @@
 import "./styles.css";
-
-const project = {
-  "sourceNo": 10,
-  "id": "hxyfront-62008",
-  "port": 62008,
-  "title": "烟花燃放脚本编排",
-  "domain": "烟花燃放编排",
-  "prompt": "我想做一个面向烟花燃放编排师的燃放脚本前端工具，可以记录节目段落、烟花型号、口径、发射角度、点火时间、持续时间、安全距离和音乐时间点。页面需要有时间轴编排、燃放点位平面图、型号清单、冲突时间提示和整场节目预览。",
-  "palette": [
-    "#1d4ed8",
-    "#dc2626",
-    "#f59e0b"
-  ],
-  "metrics": [
-    "节目段落",
-    "点火节点",
-    "冲突提示",
-    "安全距离"
-  ],
-  "filters": [
-    "礼花弹",
-    "罗马烛光",
-    "扇形架",
-    "冷焰火"
-  ],
-  "fields": [
-    "节目段落",
-    "烟花型号",
-    "口径",
-    "发射角度",
-    "点火时间",
-    "安全距离"
-  ],
-  "records": [
-    [
-      "Intro",
-      "30mm扇形架",
-      "00:12.500",
-      "安全距离35m"
-    ],
-    [
-      "Chorus A",
-      "75mm礼花弹",
-      "01:08.200",
-      "与B点位间隔正常"
-    ],
-    [
-      "Finale",
-      "冷焰火",
-      "03:42.000",
-      "近景区待确认"
-    ]
-  ]
-};
+import { ConflictList } from "./ui/ConflictList";
+import { CueEditor } from "./ui/CueEditor";
+import { ModelInventory } from "./ui/ModelInventory";
+import { PointMapView } from "./ui/PointMapView";
+import { RehearsalBar } from "./ui/RehearsalBar";
+import { SegmentPanel } from "./ui/SegmentPanel";
+import { TimelineView } from "./ui/TimelineView";
+import { useStudio } from "./state/useStudio";
 
 function App() {
+  const {
+    script,
+    snapshot,
+    rejection,
+    dirtyCue,
+    run,
+    changeAngle,
+    changePoint,
+    changeIgnition,
+    toggleSegment,
+    setMusicDuration,
+    restoreSeed,
+  } = useStudio();
+
+  const playedCount = snapshot?.entries.filter((e) => e.status === "played").length ?? 0;
+  const conflictCount = snapshot?.conflicts.length ?? 0;
+  const pendingCount =
+    script.cues.length -
+    (snapshot?.entries.filter((e) => e.status === "played" || e.status === "conflict").length ??
+      0);
+
   return (
-    <main className="app">
-      <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
-      </section>
+    <main className="app studio">
+      <header className="hero hero-compact">
+        <p>hxyfront-62008 · 源提示词10 · Port 62008</p>
+        <h1>{script.title}</h1>
+        <span>
+          整场预演按点火时间推进；同一燃放点位前一枚未结束或安全间距不足时立即停在冲突节点。
+          调整角度或换点后只能从该节点重跑；音乐时间点越界或段落已移除时整次预演拒绝。
+        </span>
+      </header>
 
       <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[86, 14, 7, 32][index] ?? 12}</strong>
-          </article>
-        ))}
+        <article>
+          <small>节目段落</small>
+          <strong>{script.segments.length}</strong>
+        </article>
+        <article>
+          <small>点火节点</small>
+          <strong>{script.cues.length}</strong>
+        </article>
+        <article>
+          <small>已燃放 / 未推进</small>
+          <strong>
+            {playedCount} / {Math.max(0, pendingCount)}
+          </strong>
+        </article>
+        <article>
+          <small>冲突提示</small>
+          <strong className={conflictCount > 0 ? "metric-danger" : ""}>{conflictCount}</strong>
+        </article>
       </section>
 
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}筛选</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存草稿</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
+      <section className="panel">
+        <RehearsalBar
+          script={script}
+          snapshot={snapshot}
+          rejection={rejection}
+          dirtyCue={dirtyCue}
+          onRun={run}
+          onResetDemo={restoreSeed}
+        />
       </section>
 
       <section className="panel">
         <div className="heading">
           <div>
-            <p>历史记录</p>
-            <h2>近期工作台</h2>
+            <p>时间轴编排</p>
+            <h2>按点位泳道 · 取自最近预演快照</h2>
           </div>
-          <button>导出摘要</button>
+          <Legend />
         </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
+        <div className="timeline-scroll">
+          <TimelineView script={script} snapshot={snapshot} />
+        </div>
+      </section>
+
+      <section className="map-grid">
+        <div className="panel">
+          <div className="heading">
+            <div>
+              <p>燃放点位平面图</p>
+              <h2>安全距离圆 · 发射方向 · 冲突连线</h2>
+            </div>
+          </div>
+          <PointMapView script={script} snapshot={snapshot} />
+        </div>
+
+        <div className="panel">
+          <div className="heading">
+            <div>
+              <p>冲突时间提示</p>
+              <h2>冲突清单</h2>
+            </div>
+          </div>
+          <ConflictList script={script} snapshot={snapshot} />
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="heading">
+          <div>
+            <p>原稿编辑</p>
+            <h2>点火节点（调角度 / 换点 / 改点火时间后需重跑）</h2>
+          </div>
+          {dirtyCue && (
+            <span className="dirty-banner">
+              节点 #{dirtyCue.code} 已调整，重跑将从该节点开始；其之前的结果沿用上一次快照。
+            </span>
+          )}
+        </div>
+        <CueEditor
+          script={script}
+          snapshot={snapshot}
+          dirtyCueId={dirtyCue?.id ?? null}
+          onChangeAngle={changeAngle}
+          onChangePoint={changePoint}
+          onChangeIgnition={changeIgnition}
+        />
+      </section>
+
+      <section className="lower-grid">
+        <div className="panel">
+          <div className="heading">
+            <div>
+              <p>音乐与段落</p>
+              <h2>时间点 / 段落移除</h2>
+            </div>
+          </div>
+          <SegmentPanel
+            script={script}
+            onToggleSegment={toggleSegment}
+            onMusicDuration={setMusicDuration}
+          />
+        </div>
+
+        <div className="panel">
+          <div className="heading">
+            <div>
+              <p>型号清单</p>
+              <h2>口径 · 持续 · 安全距离</h2>
+            </div>
+          </div>
+          <ModelInventory script={script} />
         </div>
       </section>
     </main>
+  );
+}
+
+function Legend() {
+  return (
+    <div className="legend">
+      <span>
+        <i className="swatch played" /> 已燃放
+      </span>
+      <span>
+        <i className="swatch conflict" /> 冲突停止
+      </span>
+      <span>
+        <i className="swatch pending" /> 未推进
+      </span>
+      <span>
+        <i className="swatch dirty" /> 已调整待重跑
+      </span>
+    </div>
   );
 }
 
